@@ -291,6 +291,120 @@ def process(dataset: dict) -> None:
 
 
 
+# Preprocessing comparison — quantify how much each dataset changed between
+# ./raw_data and ./cleaned_data. Writes preprocessing_comparison.csv.
+def compare_preprocessing() -> pd.DataFrame:
+    RAW = Path("./raw_data")
+    CLEAN = OUT_ROOT
+    rows = []
+
+    def add(dataset, unit, raw_n, clean_n, note):
+        removed = raw_n - clean_n if (raw_n is not None and clean_n is not None) else None
+        pct = (100 * removed / raw_n) if (removed is not None and raw_n) else 0.0
+        rows.append({
+            "Dataset": dataset, "Unit": unit, "Raw": raw_n, "Cleaned": clean_n,
+            "Removed": removed, "Removed %": round(pct, 2), "Cleaning step": note,
+        })
+        print(f"  {dataset:28s} raw={raw_n} clean={clean_n} removed={removed} ({pct:.2f}%)")
+
+    def csv_rows(path):
+        try:
+            return len(pd.read_csv(path))
+        except Exception:
+            return 0
+
+    print("\n=== Preprocessing comparison ===")
+    # Dartmouth discharge
+    raw_n = sum(csv_rows(f) for f in (RAW / "Darthmouth Flood Observatory").glob("*_discharge.csv"))
+    clean_n = sum(csv_rows(f) for f in (CLEAN / "dartmouth").glob("*_discharge.csv"))
+    add("Dartmouth discharge", "rows", raw_n, clean_n, "Dropped NaN rows + duplicate dates")
+
+    # Lake water levels
+    clean_n = sum(csv_rows(f) for f in (CLEAN / "lakes").glob("*_water_level.csv"))
+    base = RAW / "Water levels lakes"
+    raw_n = 0
+    albert = base / "water_level_altimetry_Albert.nc"
+    if albert.exists():
+        try:
+            ds = xr.open_dataset(albert)
+            raw_n += len(ds.to_dataframe().reset_index())
+            ds.close()
+        except Exception:
+            pass
+    missions = {"TOPEX", "JASON-1", "JASON-2", "JASON-3", "J1", "J2", "J3",
+                "S3A", "S3B", "S6A", "ENVISAT", "ERS-1", "ERS-2"}
+    for lake in ["victoria", "Kyoga"]:
+        fp = base / f"water_level_{lake}.txt"
+        if fp.exists():
+            with open(fp, "r", encoding="latin-1") as f:
+                raw_n += sum(1 for ln in f
+                             if ln.strip() and ln.strip().split()[0] in missions)
+    add("Lake water levels", "rows", raw_n, clean_n,
+        "Parsed altimetry records, dropped NaN + dup (date, mission)")
+
+    # ERA5 rainfall & runoff
+    raw_files = list((RAW / "rainfall and runoff").glob("ERA5_*.nc"))
+    clean_files = list((CLEAN / "era5").glob("ERA5_*.nc"))
+    add("ERA5 rainfall & runoff", "files", len(raw_files), len(clean_files),
+        "NaN filled with 0 (grid kept), resampled to daily")
+
+    # Flood masks
+    for sub in ["compact_recurring", "compact_unusual"]:
+        raw_n = clean_n = 0
+        for fp in (RAW / "flood_masks" / sub).glob("*.parquet"):
+            try:
+                raw_n += len(pd.read_parquet(fp, columns=["lat"]))
+            except Exception:
+                pass
+        for fp in (CLEAN / "flood_masks" / sub).glob("*.parquet"):
+            try:
+                clean_n += len(pd.read_parquet(fp, columns=["lat"]))
+            except Exception:
+                pass
+        add(f"Flood masks ({sub})", "points", raw_n, clean_n,
+            "Removed flood pixels outside South Sudan border")
+
+    # Administrative boundaries
+    for fname in ["ssd_admin1.geojson", "ssd_admin2.geojson"]:
+        raw_fp = RAW / "Administrative boundaries" / fname
+        clean_fp = CLEAN / "administrative_boundaries" / fname
+        raw_n = len(gpd.read_file(raw_fp)) if raw_fp.exists() else None
+        clean_n = len(gpd.read_file(clean_fp)) if clean_fp.exists() else None
+        add(f"Admin boundaries ({fname})", "features", raw_n, clean_n,
+            "Dropped invalid/missing geometries")
+
+    # Health facilities
+    raw_fp = RAW / "health facilities" / "Sub-Saharan_public_health_facilities.geojson"
+    clean_fp = CLEAN / "health_facilities" / "south_sudan_health_facilities.geojson"
+    raw_n = len(gpd.read_file(raw_fp)) if raw_fp.exists() else None
+    clean_n = len(gpd.read_file(clean_fp)) if clean_fp.exists() else None
+    add("Health facilities", "features", raw_n, clean_n,
+        "Kept South Sudan only, dropped duplicate facility names")
+
+    # IPC food insecurity
+    clean_fp = CLEAN / "ipc" / "ipc_phase3plus.csv"
+    clean_n = csv_rows(clean_fp) if clean_fp.exists() else None
+    raw_n = 0
+    for fp in (RAW / "IPC").glob("*.xlsx"):
+        try:
+            raw_n += len(pd.read_excel(fp))
+        except Exception:
+            pass
+    add("IPC food insecurity", "rows", raw_n, clean_n,
+        "Kept county rows, normalised names, pivoted by county")
+
+    # GDP
+    clean_fp = CLEAN / "gdp" / "south_sudan_gdp.csv"
+    clean_n = csv_rows(clean_fp) if clean_fp.exists() else None
+    add("GDP", "year rows", None, clean_n,
+        "Extracted GDP indicator, reshaped wide-to-long by year")
+
+    df = pd.DataFrame(rows)
+    df.to_csv("preprocessing_comparison.csv", index=False, encoding="utf-8")
+    print("Saved: preprocessing_comparison.csv")
+    return df
+
+
 # Main
 if __name__ == "__main__":
     print(f"Output directory: {OUT_ROOT.resolve()}")
@@ -298,5 +412,7 @@ if __name__ == "__main__":
 
     for dataset in DATASETS:
         process(dataset)
+
+    compare_preprocessing()
 
     print("\nDone. Cleaned files saved in ./cleaned_data/")
