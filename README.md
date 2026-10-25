@@ -1,4 +1,4 @@
-# Advanced Data Challenge Group ZHL
+# Advanced Data Challenge Group 6
 
 ## Project Overview
 
