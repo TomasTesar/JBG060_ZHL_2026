@@ -1,51 +1,25 @@
-# JBG060-2026: Flood Dynamics in South Sudan
+# Advanced Data Challenge Group ZHL
 
-## Introduction and overview
+## Project Overview
 
-This repository supports the 2026 JBG060 course project on flood dynamics in South Sudan. 
-Its current scope is data loading and preprocessing: it brings hydrometeorological hazard data together with 
-exposure and impact data so that they can be used in later flood-risk analyses.
+This project investigates flood dynamics in South Sudan and their impact on agriculture, using an integrated set of hydrometeorological hazard, exposure, and impact datasets. The repository combines data auditing, cleaning, exploratory analysis, and predictive modelling with the aim of answering the question:
 
-The repository currently provides utilities for:
+To what extent can seasonal rainfall observed by the end of the rainy season predict cropland flood exposure in South Sudan's Aweil counties, so that flooding of agricultural land — and the resulting threat to food security — can be anticipated rather than only observed after the fact?
 
-- river discharge, lake levels, rainfall, runoff, evapotranspiration, and flood masks;
-- administrative boundaries, population, roads, health facilities, cattle, cropland, rangeland, GDP, and
-  food-insecurity data;
-- spatial subsetting by coordinate or bounding box; and
-- converting selected raw inputs into pandas, GeoPandas, Xarray, or NetworkX objects.
+The project includes tools for loading and subsetting raw datasets, quality auditing, cleaning, exploratory data analysis of where and when cropland floods, and an interpretable rainfall-based model that estimates how much cropland is exposed to flooding in a given season.
 
-This is not yet an end-to-end flood model or a complete reproducible analysis pipeline. The two Python files contain 
-loader functions and executable demonstrations.
+## Getting Started
 
-## Repository structure
-
-```text
-JBG060-2026/
-|-- processing_data/
-|   |-- loading.py                 # Hydrometeorological data loaders
-|   `-- loading_impact_data.py     # Exposure and impact data loaders
-|-- literature/                    # Supporting papers and data documentation
-|-- raw_data/                      # External download; ignored by Git
-|-- requirements.txt               # Pinned Python dependencies
-|-- .gitignore
-`-- README.md
-```
-
-Running the evapotranspiration processor creates `processing_data/evapotranspiration/`. 
-Both that generated directory and `raw_data/` are excluded from Git.
-
-## Requirements and installation
+### Prerequisites
 
 - Git
 - Python 3.12 or newer
 
 All Python dependencies and their versions are listed in [`requirements.txt`](requirements.txt).
 
-### 1. Fork and clone the repository
+#### 1. Fork and clone the repository
 
-First, open the [course repository](https://github.com/eerandi/JBG060_ZHL_2026) on GitHub. Select **Fork** in the
-top-right corner, choose your GitHub account as the owner, and create the fork. This gives you your own copy of the
-course repository where you can commit and push your work.
+First, open the [course repository](https://github.com/eerandi/JBG060_ZHL_2026) on GitHub. Select **Fork** in the top-right corner, choose your GitHub account as the owner, and create the fork. This gives you your own copy of the course repository where you can commit and push your work.
 
 Then clone **your fork** (replace `YOUR_GITHUB_USERNAME` with your GitHub username):
 
@@ -54,7 +28,7 @@ git clone https://github.com/YOUR_GITHUB_USERNAME/JBG060_ZHL_2026.git
 cd JBG060_ZHL_2026
 ```
 
-### 2. Create and activate a virtual environment
+#### 2. Create and activate a virtual environment
 
 Windows PowerShell:
 
@@ -82,11 +56,11 @@ conda activate jbg060
 python -m pip install -r requirements.txt
 ```
 
-## External data setup
+### Data setup
 
-The data is deliberately **not stored in this Git repository**. Download it separately from SURFdrive. The SURFdrive link and Password is shared in the description of the assignment on Canvas.
+The data is deliberately **not stored in this Git repository**. Download it separately from SURFdrive; the SURFdrive link and password are shared in the description of the assignment on the Canvas page for JBG060 (2026).
 
-Put the downloaded data in the `raw_data` folder.
+Put the downloaded data in the `raw_data` folder in the repository root so that each loader can find its files (for example `raw_data/flood_masks/compact_recurring/...`, `raw_data/rainfall and runoff/ERA5_<year>.nc`).
 
 The administrative-boundary loader expects the level 1 and level 2 GeoJSON files at:
 
@@ -97,15 +71,95 @@ raw_data/
     `-- ssd_admin2.geojson
 ```
 
-These files must be present whenever `processing_data.loading_impact_data` is imported because the module loads the
-administrative boundaries at import time.
+These files must be present whenever `processing_data.loading_impact_data` is imported, because the module loads the administrative boundaries at import time.
 
-An overview of the supplied datasets and files is available in `Data_overview.xlsx`.
+Run Python from the repository root. The code uses relative paths such as `./raw_data/...`; running from another directory will cause file-not-found errors.
+
+## Pipeline
+
+The workflow runs in four stages: **audit → clean → explore → predict**.
+
+### Step 1 — Audit
+
+Checks every raw dataset for quality issues before any analysis: missing files, unparseable dates, duplicate records, negative or out-of-range values, bad coordinate reference systems, invalid geometries, and coordinates falling outside South Sudan. Each dataset is reported individually and a consolidated issue summary is printed at the end.
+
+```bash
+python audit.py
+```
+
+### Step 2 — Clean
+
+Loads every dataset, removes NaNs and duplicates, drops flood pixels that fall outside the South Sudan national border, fills gridded NetCDF gaps (to preserve the spatial grid), normalises IPC county names, and writes cleaned outputs to `./cleaned_data/`. It also writes `preprocessing_comparison.csv`, quantifying how many records each cleaning step removed per dataset.
+
+```bash
+python data_cleaning.py
+```
+
+### Step 3 — Explore
+
+`data_exploration.ipynb` and `Cropland_analysis.ipynb` explore where and when cropland floods. `Cropland_analysis.ipynb` focuses on the five Aweil counties (Centre, East, North, South, West) in Northern Bahr el Ghazal, computes the share of crop-weighted cropland flooded per season, and separates recurring from unusual flooding against the harvest calendar.
+
+### Step 4 — Predict
+
+`Cropland_prediction.ipynb` builds an interpretable rainfall predictor. Using local ERA5 rainfall totals known on 31 August (Jun–Aug and Jul–Aug), it estimates the percentage of cropland in Aweil East + South flooded at least once in the worst month of Sep–Dec, evaluated out of sample. `aweil_analysis.ipynb` contains the earlier detection-based flood-severity experiments that motivated this target.
+
+## Project structure
+
+```text
+JBG060_ZHL_2026/
+|-- processing_data/
+|   |-- loading.py                 # Hydrometeorological data loaders
+|   `-- loading_impact_data.py     # Exposure and impact data loaders
+|-- audit.py                       # Data quality audit across all datasets
+|-- data_cleaning.py               # Load -> clean -> save pipeline + comparison report
+|-- data_exploration.ipynb         # Initial exploratory data analysis
+|-- Cropland_analysis.ipynb        # Where and when cropland floods (Aweil counties)
+|-- Cropland_prediction.ipynb      # Rainfall-based cropland flood-exposure model
+|-- aweil_analysis.ipynb           # Detection-based flood severity experiments
+|-- Crop_data.csv                  # Derived cropland dataset
+|-- figures/poster/                # Poster figures
+|-- literature/                    # Supporting papers and data documentation
+|-- raw_data/                      # External download; ignored by Git
+|-- cleaned_data/                  # Generated by data_cleaning.py; ignored by Git
+|-- requirements.txt               # Pinned Python dependencies
+`-- README.md
+```
+
+## Function and data reference
+
+### Hydrometeorological data: `processing_data/loading.py`
+
+| Function | Main input | Return value or generated output |
+|---|---|---|
+| `load_dartmouth_data()` | Station metadata and discharge CSV files | Dictionary of discharge DataFrames keyed by area ID |
+| `load_lake_stations()` | Albert NetCDF and Kyoga/Victoria text files | Dictionary of lake-level DataFrames |
+| `load_rainfall_runoff(years)` | Annual ERA5 NetCDF files | Daily Xarray Dataset with precipitation (`tp`) and runoff (`ro`) |
+| `process_ET(year, target_longitude, target_latitude)` | Daily AgERA5 NetCDF files | One processed annual CSV for the nearest grid cell |
+| `load_processed_ET(years, ...)` | Processed annual ET CSV files | Dictionary of DataFrames keyed by year |
+| `load_flood_masks(years, bbox=None)` | Recurring and unusual flood Parquet files | DataFrame with `date`, `lat`, `lon`, `tile`, `flood_type` |
+| `flood_mask_bbox(df, bbox)` | Flood DataFrame and coordinate limits | Spatially filtered DataFrame |
+
+In flood-mask results, `flood_type == 0` denotes recurring flooding and `flood_type == 1` denotes unusual flooding. If both classes occur for the same date and pixel, the unusual class takes priority.
+
+### Exposure and impact data: `processing_data/loading_impact_data.py`
+
+| Function | Main input | Return value or generated output |
+|---|---|---|
+| `load_admin_boundaries()` | Admin-level 1 and 2 GeoJSON files | Two GeoDataFrames containing states and counties |
+| `locate_coordinate(long, lat)` | Longitude and latitude in decimal degrees | Admin-level 1 and 2 names containing the coordinate |
+| `load_worldpop_coordinate(longitude, latitude)` | WorldPop rasters for 2015–2025 | Population value by year at the selected pixel |
+| `load_worldpop_area(bbox)` | WorldPop rasters for 2015–2025 | Total population by year inside the bounding box |
+| `download_OSM_network(name)` | OpenStreetMap place name and internet connection | NetworkX road graph; also attempts to save and plot nodes and edges |
+| `plot_network(name)` | Existing OSM node and edge shapefiles | NetworkX graph and two GeoDataFrames; also plots the graph |
+| `load_health_facilities()` | Sub-Saharan health-facility GeoJSON | South Sudan facilities as a GeoDataFrame |
+| `load_cattle()` | Cattle raster | DataFrame plus longitude and latitude arrays |
+| `load_farmland_mask(bbox, mask_type)` | Crop or rangeland raster | Spatially subset Xarray DataArray |
+| `load_GDP()` | World Bank indicator CSV | GDP values for 2008–2015 keyed by year |
+| `load_ipc_data()` | IPC Excel workbooks | County-level IPC Phase 3+ population table |
+
+`mask_type` must be either `"crop"` or `"rangeland"`. Bounding boxes use decimal degrees and require the keys `lat_min`, `lat_max`, `lon_min`, and `lon_max`.
 
 ## Usage and examples
-
-Run Python from the repository root. The code uses relative paths such as `./raw_data/...`; running from 
-another directory will cause file-not-found errors.
 
 ### Recommended: call only the functions needed
 
@@ -166,12 +220,11 @@ print(f"Loaded {len(admin1)} admin-level 1 and {len(admin2)} admin-level 2 areas
 print(admin1_name, admin2_name)
 ```
 
-Coordinates must be supplied as longitude followed by latitude. If a coordinate is not contained in a South Sudan
-polygon, the corresponding administrative name is returned as the string `"None"` and a warning is printed.
+Coordinates must be supplied as longitude followed by latitude. If a coordinate is not contained in a South Sudan polygon, the corresponding administrative name is returned as the string `"None"` and a warning is printed.
 
 ### Full demonstration scripts
 
-The modules also contain hard-coded examples and do not accept command-line options:
+The loader modules also contain hard-coded examples and do not accept command-line options:
 
 ```bash
 python processing_data/loading.py
@@ -180,62 +233,32 @@ python processing_data/loading_impact_data.py
 
 These commands run the full demonstrations:
 
-- `loading.py` works across 2000-2025, loads large NetCDF and Parquet datasets, and may process approximately 
-9,500 daily evapotranspiration files into annual CSV files.
+- `loading.py` works across 2000–2025, loads large NetCDF and Parquet datasets, and may process approximately
+  9,500 daily evapotranspiration files into annual CSV files.
 - `loading_impact_data.py` loads the administrative boundaries, demonstrates two coordinate lookups, runs every
-impact-data example, requests a road network from OpenStreetMap, and opens interactive plots.
-- The OpenStreetMap step needs an internet connection. Prefer the individual functions when working headlessly 
-or with limited time or memory.
-
-## Function and data reference
-
-### Hydrometeorological data: `processing_data/loading.py`
-
-| Function | Main input | Return value or generated output |
-|---|---|---|
-| `load_dartmouth_data()` | Station metadata and discharge CSV files | Dictionary of discharge DataFrames keyed by area ID |
-| `load_lake_stations()` | Albert NetCDF and Kyoga/Victoria text files | Dictionary of lake-level DataFrames |
-| `load_rainfall_runoff(years)` | Annual ERA5 NetCDF files | Daily Xarray Dataset containing precipitation (`tp`) and runoff (`ro`) |
-| `process_ET(year, target_longitude, target_latitude)` | Daily AgERA5 NetCDF files | One processed annual CSV for the nearest grid cell |
-| `load_processed_ET(years, ...)` | Processed annual ET CSV files | Dictionary of DataFrames keyed by year |
-| `load_flood_masks(years, bbox=None)` | Recurring and unusual flood Parquet files | DataFrame with `date`, `lat`, `lon`, `tile`, and `flood_type` |
-| `flood_mask_bbox(df, bbox)` | Flood DataFrame and coordinate limits | Spatially filtered DataFrame |
-
-In flood-mask results, `flood_type == 0` denotes recurring flooding and `flood_type == 1` denotes unusual flooding. 
-If both classes occur for the same date and pixel, the unusual class takes priority.
-
-### Exposure and impact data: `processing_data/loading_impact_data.py`
-
-| Function | Main input | Return value or generated output |
-|---|---|---|
-| `load_admin_boundaries()` | Admin-level 1 and 2 GeoJSON files | Two GeoDataFrames containing states and counties |
-| `locate_coordinate(long, lat)` | Longitude and latitude in decimal degrees | Admin-level 1 and 2 names containing the coordinate |
-| `load_worldpop_coordinate(longitude, latitude)` | WorldPop rasters for 2015-2025 | Population value by year at the selected pixel |
-| `load_worldpop_area(bbox)` | WorldPop rasters for 2015-2025 | Total population by year inside the bounding box |
-| `download_OSM_network(name)` | OpenStreetMap place name and live internet connection | NetworkX road graph; also attempts to save and plot nodes and edges |
-| `plot_network(name)` | Existing OSM node and edge shapefiles | NetworkX graph and two GeoDataFrames; also plots the graph |
-| `load_health_facilities()` | Sub-Saharan health-facility GeoJSON | South Sudan facilities as a GeoDataFrame |
-| `load_cattle()` | Cattle raster | DataFrame plus longitude and latitude arrays |
-| `load_farmland_mask(bbox, mask_type)` | Crop or rangeland raster | Spatially subset Xarray DataArray |
-| `load_GDP()` | World Bank indicator CSV | GDP values for 2008-2015 keyed by year |
-| `load_ipc_data()` | IPC Excel workbooks | County-level IPC Phase 3+ population table |
-
-`mask_type` must be either `"crop"` or `"rangeland"`. Bounding boxes use decimal degrees and require the keys 
-`lat_min`, `lat_max`, `lon_min`, and `lon_max`.
+  impact-data example, requests a road network from OpenStreetMap, and opens interactive plots.
+- The OpenStreetMap step needs an internet connection. Prefer the individual functions when working headlessly
+  or with limited time or memory.
 
 ## Generated outputs
 
 - `process_ET()` creates annual CSV files in `processing_data/evapotranspiration/`.
-- `download_OSM_network()` is intended to create node and edge shapefiles in `raw_data/OSM/<place>/`.
+- `download_OSM_network()` creates node and edge shapefiles in `raw_data/OSM/<place>/`.
+- `data_cleaning.py` writes cleaned datasets to `./cleaned_data/` and a summary table to `preprocessing_comparison.csv`.
 - Plotting functions display figures but do not save image files.
 - All other loader functions return Python objects in memory.
 
-Generated ET files, downloaded data, cached files, virtual environments, and Python bytecode should not be committed.
+Generated ET files, cleaned data, downloaded data, cached files, virtual environments, and Python bytecode should not be committed (they are listed in `.gitignore`).
 
-## Credits and acknowledgements
+## Legal and ethical considerations
 
-Dataset descriptions, file overviews, provenance, and original provider information are documented in `Data_overview.xlsx`. 
-Consult the original providers for licenses, citation instructions, and usage restrictions.
+- The repository is intended for educational and research use. It has not been validated for emergency response, resource allocation, or other operational humanitarian decisions.
+- Flood detections and the `flood_type` label are data-product classifications, not direct measures of damage, severity, or individual exposure.
+- Respect each data provider's license, attribution, access, and redistribution conditions. Access through SURFdrive does not replace the original provider's terms.
+
+## Acknowledgments
+
+Supporting papers and data manuals are retained in [`literature/`](literature/).
 
 ### Literature
 
@@ -254,15 +277,6 @@ Consult the original providers for licenses, citation instructions, and usage re
   [PDF](<literature/Floods and food insecurity - A method to estimate the effect of inundation on crops availability.pdf>) |
   [DOI](https://doi.org/10.1016/j.advwatres.2017.06.019)
 
-Supporting papers and data manuals are retained in [`literature/`](literature/). The project relies on pandas, NumPy, Xarray,
-Dask, GeoPandas, Shapely, Rasterio, rioxarray, NetworkX, OSMnx, and Matplotlib; see [`requirements.txt`](requirements.txt)
-for the complete version-pinned environment.
-
-## Legal and ethical considerations
-
-- The repository is intended for educational and research use. It has not been validated for emergency response, 
-resource allocation, or other operational humanitarian decisions.
-- Flood detections and the `flood_type` label are data-product classifications, not direct measures of damage, 
-severity, or individual exposure.
-- Respect each data provider's license, attribution, access, and redistribution conditions. Access through SURFdrive 
-does not replace the original provider's terms.
+The project relies on pandas, NumPy, Xarray, Dask, GeoPandas, Shapely, Rasterio, rioxarray, NetworkX, OSMnx, and
+Matplotlib; see [`requirements.txt`](requirements.txt) for the complete version-pinned environment. Consult the
+original data providers for licenses, citation instructions, and usage restrictions.
