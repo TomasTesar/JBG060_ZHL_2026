@@ -9,3 +9,4 @@ cache
 .idea
 .git
 cleaned_data
+.DS_Store
